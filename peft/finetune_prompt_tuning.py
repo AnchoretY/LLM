@@ -2,24 +2,24 @@
 Author: AnchoretY
 Date: 2023-07-10 22:25:59
 LastEditors: AnchoretY
-LastEditTime: 2023-09-18 03:31:29
+LastEditTime: 2023-09-18 03:45:13
 '''
-import os
 import torch
 import deepspeed
 import argparse
 import math
-
+import os
 from peft import (
-    LoraConfig, 
-    PrefixTuningConfig,
+    PromptTuningInit,
+    PromptTuningConfig,
     get_peft_model,
     TaskType
 )
-from torch.utils.data.distributed import DistributedSampler
+
 from torch.utils.data import RandomSampler, DataLoader,SequentialSampler
-from transformers import AutoModelForCausalLM,AutoTokenizer,get_scheduler,SchedulerType
+from torch.utils.data.distributed import DistributedSampler
 from deepspeed.ops.adam import DeepSpeedCPUAdam, FusedAdam
+from transformers import AutoModelForCausalLM,AutoTokenizer,get_scheduler,SchedulerType
 
 
 from dataset import Seq2SeqDataSet,coll_fn
@@ -27,10 +27,11 @@ from utils.ds_utils import get_train_ds_config
 from utils.dl_helper import get_optimizer_grouped_parameters,to_device,print_rank_0,print_trainable_parameters
 from utils.eval_helper import evaluation_ppl
 
+
 def set_args():
     parser = argparse.ArgumentParser()
     parser.add_argument('--train_path', default='/home/yhk/github/DeepSpeed/llm_dataset/CodeInstruction/', type=str, help='')
-    parser.add_argument('--model_dir', default="/home/yhk/github/DeepSpeed/lmsys/vicuna-7b-v1.3/", type=str, help='')
+    parser.add_argument('--model_dir', default="/home/yhk/github/DeepSpeed/llm_model/lmsys/vicuna-7b-v1.3/", type=str, help='')
     parser.add_argument('--num_train_epochs', default=5, type=int, help='')
     parser.add_argument('--train_batch_size', default=2, type=int, help='')
     parser.add_argument('--local_rank', default=-1, type=int, help='local_rank for distributed training on gpus')
@@ -45,7 +46,7 @@ def set_args():
     parser.add_argument('--learning_rate', type=float, default=1e-3, help='Initial learning rate (after the potential warmup period) to use.')
     parser.add_argument("--num_warmup_steps",type=int,default=0,help="Number of steps for the warmup in the lr scheduler.")
     parser.add_argument('--max_src_len', type=int, default=450, help='')
-    parser.add_argument('--num_virtual_tokens', type=int, default=30, help='Prefix Token nums in ')
+    parser.add_argument('--num_virtual_tokens', type=int, default=8, help='Prefix Token nums in ')
     parser.add_argument('--prompt_text', type=str,
                         default="You are a bug checker, I need you to check out the bugs in this code:",
                         help='')
@@ -81,13 +82,16 @@ def main():
     tokenizer.pad_token = tokenizer.eos_token
     print("model and tokenizer load completed!")
 
-    # 将模型改为prefix-tune结构 
-    prefix_config = PrefixTuningConfig(
-        task_type=TaskType.CAUSAL_LM, 
-        inference_mode=False, 
-        num_virtual_tokens=args.num_virtual_tokens)
+    # 将模型改为LoRA结构
+    prompt_config = PromptTuningConfig(
+        task_type=TaskType.CAUSAL_LM,
+        prompt_tuning_init=PromptTuningInit.TEXT,
+        num_virtual_tokens=args.num_virtual_tokens,
+        prompt_tuning_init_text="Classify if the tweet is a complaint or not:",
+        tokenizer_name_or_path=args.model_dir,
+    )
 
-    model = get_peft_model(model, prefix_config) # 这里使用lora配置后，会自动冻结其余部分参数，只有lora部分可训练
+    model = get_peft_model(model, prompt_config) 
     # 打印可训练层和参数数量
     print_trainable_parameters(model)
 
@@ -139,6 +143,8 @@ def main():
                                                          lr_scheduler=lr_scheduler,
                                                          dist_init_required=True # 使用分布式训练初始化
                                                          )
+    # if args.gradient_checkpointing:
+    #     model.gradient_checkpointing_enable()
 
 
     print("-"*10+"Train"+"-"*10)
@@ -173,8 +179,7 @@ def main():
     # 模型存储
     if args.output_dir is not None:
         print_rank_0('saving the final model ...', args.global_rank)
-
-        save_path = os.path.join(args.output_dir,"prefix_tune")
+        save_path = os.path.join(args.output_dir,"prompt_tune")
         if args.global_rank == 0:
             model_engine.module.save_pretrained(save_path)
 
@@ -182,7 +187,8 @@ def main():
             # 对于zero stage 3，由于模型也被切分到了多个GPU上，因此需要专门的模型存储函数
             print_rank_0("Zero stage lora save unsported!!!")
     
+
+
 if __name__ == "__main__":
     main()
-    # deepspeed finetune_prefix_tuning.py  --num_train_epochs 1  --zero_stage 2  --num_virtual_tokens 30 --model_dir /home/yhk/github/DeepSpeed/facebook/opt-350m/
-    
+    # deepspeed finetune_prompt_tuning.py  --num_train_epochs 1  --zero_stage 2  --num_virtual_tokens 30 --model_dir /home/yhk/github/DeepSpeed/llm_model/facebook/opt-350m/
