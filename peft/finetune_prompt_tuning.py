@@ -4,6 +4,13 @@ Date: 2023-07-10 22:25:59
 LastEditors: AnchoretY
 LastEditTime: 2023-09-18 03:45:13
 '''
+"""
+deepspeed finetune_prompt_tuning.py  \
+    --num_train_epochs 1  \
+    --zero_stage 2  \
+    --num_virtual_tokens 30 \
+    --model_dir /home/yhk/github/DeepSpeed/llm_model/facebook/opt-350m/
+"""
 import torch
 import deepspeed
 import argparse
@@ -191,4 +198,4 @@ def main():
 
 if __name__ == "__main__":
     main()
-    # deepspeed finetune_prompt_tuning.py  --num_train_epochs 1  --zero_stage 2  --num_virtual_tokens 30 --model_dir /home/yhk/github/DeepSpeed/llm_model/facebook/opt-350m/
+    # 

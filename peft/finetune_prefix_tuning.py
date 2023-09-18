@@ -2,9 +2,15 @@
 Author: AnchoretY
 Date: 2023-07-10 22:25:59
 LastEditors: AnchoretY
-LastEditTime: 2023-09-18 03:28:51
+LastEditTime: 2023-09-18 04:06:16
 '''
-
+"""
+deepspeed finetune_prefix_tuning.py  \
+    --num_train_epochs 1  \
+    --zero_stage 2  \
+    --num_virtual_tokens 30 \
+    --model_dir /home/yhk/github/DeepSpeed/facebook/opt-350m/
+"""
 from transformers import AutoModelForCausalLM,AutoTokenizer,get_scheduler,SchedulerType
 import torch
 import deepspeed
@@ -185,5 +191,5 @@ def main():
     
 if __name__ == "__main__":
     main()
-    # deepspeed finetune_prefix_tuning.py  --num_train_epochs 1  --zero_stage 2  --num_virtual_tokens 30 --model_dir /home/yhk/github/DeepSpeed/facebook/opt-350m/
+    
     
